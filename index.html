@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Intelligence Platform｜即時台股爬蟲與數據視覺化平台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family:'Noto Sans TC', sans-serif; transition: background .25s ease, color .25s ease; }
+    html[data-theme="dark"] {
+      --bg-main:#08111f; --bg-section:#0f172a; --bg-section-2:#111827;
+      --text-main:#ffffff; --text-muted:#cbd5e1; --text-soft:#94a3b8;
+      --panel-bg:linear-gradient(180deg, rgba(15,23,42,.90), rgba(15,23,42,.72));
+      --panel-border:rgba(148,163,184,.22); --chip-bg:rgba(15,23,42,.58);
+      --input-bg:#0f172a; --grid-line:rgba(148,163,184,.08);
+      --hero-a:rgba(37,99,235,.28); --hero-b:rgba(20,184,166,.22);
+    }
+    html[data-theme="light"] {
+      --bg-main:#f4f7fb; --bg-section:#ffffff; --bg-section-2:#eef3ff;
+      --text-main:#0f172a; --text-muted:#334155; --text-soft:#64748b;
+      --panel-bg:linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.90));
+      --panel-border:rgba(15,23,42,.12); --chip-bg:rgba(255,255,255,.78);
+      --input-bg:#ffffff; --grid-line:rgba(15,23,42,.08);
+      --hero-a:rgba(37,99,235,.16); --hero-b:rgba(20,184,166,.14);
+    }
+    body { background:var(--bg-main); color:var(--text-main); }
+    .theme-section { background:var(--bg-section); }
+    .theme-section-2 { background:var(--bg-section-2); }
+    .muted { color:var(--text-muted); } .soft { color:var(--text-soft); }
+    .panel { background:var(--panel-bg); border:1px solid var(--panel-border); box-shadow:0 18px 60px rgba(0,0,0,.18); backdrop-filter:blur(18px); }
+    .glass,.chip { background:var(--chip-bg); border:1px solid var(--panel-border); backdrop-filter:blur(18px); }
+    .grid-bg {
+      background-image: radial-gradient(circle at 20% 10%, var(--hero-a), transparent 28%),
+      radial-gradient(circle at 88% 18%, var(--hero-b), transparent 24%),
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      background-size:auto, auto, 44px 44px, 44px 44px;
+    }
+    .theme-input, .theme-select { background:var(--input-bg); border:1px solid var(--panel-border); color:var(--text-main); }
+    .theme-input::placeholder { color:var(--text-soft); }
+    .metric-up { color:#10b981; } .metric-down { color:#ef4444; }
+    .theme-toggle{width:76px;height:38px;border-radius:999px;border:1px solid var(--panel-border);background:var(--chip-bg);position:relative;cursor:pointer}
+    .theme-toggle span{width:30px;height:30px;border-radius:999px;background:#3b82f6;color:white;display:grid;place-items:center;position:absolute;top:3px;left:4px;transition:.25s ease;font-size:15px}
+    html[data-theme="light"] .theme-toggle span{transform:translateX(36px);background:#f59e0b}
+    html[data-theme="light"] header{background:rgba(255,255,255,.86);color:#0f172a}
+    html[data-theme="dark"] header{background:rgba(2,6,23,.78);color:white}
+    html[data-theme="light"] .nav-link{color:#334155} html[data-theme="dark"] .nav-link{color:#cbd5e1}
+    .nav-link:hover{color:#3b82f6}
+    .table-row:hover{background:rgba(59,130,246,.08)}
+    .badge{padding:.25rem .65rem;border-radius:999px;font-weight:900;font-size:.75rem}
+  </style>
+</head>
+<body>
+
+<header class="fixed inset-x-0 top-0 z-50 backdrop-blur-xl border-b" style="border-color:var(--panel-border)">
+  <div class="max-w-7xl mx-auto px-5 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl bg-blue-500 text-white grid place-items-center font-black">SI</div>
+      <div>
+        <div class="font-black leading-tight">Stock Intelligence</div>
+        <div class="text-[11px] soft">Realtime Crawler・Filter・Dashboard</div>
+      </div>
+    </div>
+    <nav class="hidden md:flex gap-7 text-sm font-bold">
+      <a href="#dashboard" class="nav-link">即時總覽</a>
+      <a href="#filter" class="nav-link">即時篩選</a>
+      <a href="#visual" class="nav-link">圖表</a>
+      <a href="admin.html" class="nav-link">後台</a>
+    </nav>
+    <div class="flex items-center gap-3">
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="切換深色淺色模式"><span id="themeIcon">🌙</span></button>
+      <button onclick="loadRealtimeData()" class="hidden sm:inline-block px-5 py-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white font-black text-sm">立即更新</button>
+    </div>
+  </div>
+</header>
+
+<section class="grid-bg pt-28 pb-14 md:pt-32 md:pb-20">
+  <div class="max-w-7xl mx-auto px-5">
+    <div class="grid xl:grid-cols-[0.82fr_1.18fr] gap-8 items-center">
+      <div>
+        <div class="inline-flex items-center gap-3 chip rounded-full px-4 py-2 text-sm font-bold muted mb-6">
+          <span id="apiDot" class="w-2.5 h-2.5 bg-amber-400 rounded-full animate-pulse"></span>
+          <span id="apiStatus">正在連接 API...</span>
+        </div>
+        <h1 class="text-4xl md:text-6xl font-black leading-[1.08] tracking-tight">
+          即時連結資料庫的<br>
+          <span class="text-blue-500">台股爬蟲前台</span>
+        </h1>
+        <p class="mt-6 muted leading-9 text-lg max-w-2xl">
+          前台已改為透過 API 讀取 SQLite / 後端資料，支援證券代號、證券名稱、日期、月份、市場、成交量門檻與策略訊號即時篩選。
+        </p>
+        <div class="mt-8 flex flex-col sm:flex-row gap-3">
+          <a href="#filter" class="px-7 py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-black text-center">開始篩選</a>
+          <a href="admin.html" class="px-7 py-4 rounded-2xl glass font-black text-center">進入後台</a>
+        </div>
+      </div>
+
+      <div id="dashboard" class="panel rounded-[2rem] p-5">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <div class="text-sm soft">Realtime Overview</div>
+            <div class="text-xl font-black">即時資料總覽</div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs soft">Last Refresh</div>
+            <div id="lastRefresh" class="font-black text-emerald-400">-</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div class="rounded-2xl glass p-4"><div class="text-xs soft">資料筆數</div><div id="stockCount" class="text-2xl font-black mt-1">-</div><div class="text-xs metric-up mt-1">stocks</div></div>
+          <div class="rounded-2xl glass p-4"><div class="text-xs soft">策略命中</div><div id="signalCount" class="text-2xl font-black mt-1">-</div><div class="text-xs metric-up mt-1">signals</div></div>
+          <div class="rounded-2xl glass p-4"><div class="text-xs soft">TWSE</div><div id="twseCount" class="text-2xl font-black mt-1">-</div><div class="text-xs text-blue-400 mt-1">上市</div></div>
+          <div class="rounded-2xl glass p-4"><div class="text-xs soft">OTC</div><div id="otcCount" class="text-2xl font-black mt-1">-</div><div class="text-xs text-blue-400 mt-1">上櫃</div></div>
+        </div>
+
+        <div class="grid lg:grid-cols-[1.1fr_.9fr] gap-4">
+          <div class="rounded-2xl glass p-4">
+            <div class="flex justify-between mb-3"><div class="font-black">策略命中趨勢</div><div class="text-xs soft">依日期</div></div>
+            <canvas id="signalChart" height="160"></canvas>
+          </div>
+          <div class="rounded-2xl glass p-4">
+            <div class="flex justify-between mb-3"><div class="font-black">市場分布</div><div class="text-xs soft">TWSE / OTC</div></div>
+            <canvas id="marketChart" height="160"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="filter" class="py-12 theme-section border-y" style="border-color:var(--panel-border)">
+  <div class="max-w-7xl mx-auto px-5">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5 mb-6">
+      <div>
+        <div class="text-blue-400 font-black text-sm mb-2">REALTIME FILTER</div>
+        <h2 class="text-3xl md:text-4xl font-black">即時篩選股票清單</h2>
+        <p class="mt-3 soft">使用者可以像 Power BI 一樣，依條件篩選資料庫中的股票資料。</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="resetFilters()" class="px-5 py-3 rounded-2xl glass font-black">清除條件</button>
+        <button onclick="loadStocks()" class="px-5 py-3 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-black">套用篩選</button>
+      </div>
+    </div>
+
+    <div class="panel rounded-[2rem] p-5 mb-6">
+      <div class="grid md:grid-cols-2 lg:grid-cols-7 gap-4">
+        <label class="block">
+          <span class="text-sm font-bold soft">證券代號</span>
+          <input id="filterCode" class="theme-input mt-2 w-full px-4 py-3 rounded-2xl outline-none" placeholder="例如 3481">
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold soft">證券名稱</span>
+          <input id="filterName" class="theme-input mt-2 w-full px-4 py-3 rounded-2xl outline-none" placeholder="例如 群創">
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold soft">日期</span>
+          <select id="filterDate" class="theme-select mt-2 w-full px-4 py-3 rounded-2xl outline-none"><option value="">全部</option></select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold soft">月份</span>
+          <select id="filterMonth" class="theme-select mt-2 w-full px-4 py-3 rounded-2xl outline-none"><option value="">全部</option></select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold soft">市場</span>
+          <select id="filterMarket" class="theme-select mt-2 w-full px-4 py-3 rounded-2xl outline-none">
+            <option value="">全部</option><option value="TWSE">TWSE</option><option value="OTC">OTC</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold soft">成交張數 ≥</span>
+          <input id="filterVolume" type="number" class="theme-input mt-2 w-full px-4 py-3 rounded-2xl outline-none" placeholder="5000">
+        </label>
+        <label class="flex items-end">
+          <span class="w-full flex items-center gap-3 theme-input px-4 py-3 rounded-2xl">
+            <input id="filterSignalOnly" type="checkbox" class="w-5 h-5">
+            <span class="font-bold">只看訊號</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="panel rounded-[2rem] overflow-hidden">
+      <div class="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b" style="border-color:var(--panel-border)">
+        <div>
+          <div class="font-black text-xl">即時股票資料表</div>
+          <div class="soft text-sm">目前顯示 <span id="displayCount">0</span> 筆資料</div>
+        </div>
+        <div class="soft text-sm">每 30 秒自動更新一次</div>
+      </div>
+      <div class="overflow-x-auto max-h-[560px]">
+        <table class="w-full text-sm">
+          <thead class="sticky top-0" style="background:var(--bg-section)">
+            <tr class="soft border-b" style="border-color:var(--panel-border)">
+              <th class="text-left py-4 px-4">日期</th>
+              <th class="text-left py-4 px-4">市場</th>
+              <th class="text-left py-4 px-4">證券代號</th>
+              <th class="text-left py-4 px-4">證券名稱</th>
+              <th class="text-right py-4 px-4">項12</th>
+              <th class="text-right py-4 px-4">開盤價</th>
+              <th class="text-right py-4 px-4">最高價</th>
+              <th class="text-right py-4 px-4">收盤價</th>
+              <th class="text-right py-4 px-4">最低價</th>
+              <th class="text-right py-4 px-4">成交張數</th>
+              <th class="text-right py-4 px-4">振幅</th>
+              <th class="text-right py-4 px-4">漲跌幅</th>
+              <th class="text-left py-4 px-4">策略訊號</th>
+            </tr>
+          </thead>
+          <tbody id="stockTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="visual" class="py-20 theme-section-2">
+  <div class="max-w-7xl mx-auto px-5">
+    <div class="text-center max-w-3xl mx-auto mb-12">
+      <div class="text-blue-400 font-black text-sm mb-3">DATA VISUALIZATION</div>
+      <h2 class="text-3xl md:text-4xl font-black">資料庫即時圖表</h2>
+      <p class="mt-4 soft leading-8">圖表資料來自 API，而不是寫死在 HTML。</p>
+    </div>
+    <div class="grid lg:grid-cols-3 gap-6">
+      <div class="panel rounded-[2rem] p-6 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4"><h3 class="text-xl font-black">成交量排行</h3><span class="text-xs soft">Top Volume</span></div>
+        <canvas id="volumeChart" height="140"></canvas>
+      </div>
+      <div class="panel rounded-[2rem] p-6">
+        <h3 class="text-xl font-black mb-5">資料流程狀態</h3>
+        <div id="healthBox" class="space-y-4"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact" class="py-20 theme-section">
+  <div class="max-w-5xl mx-auto px-5">
+    <div class="panel rounded-[2rem] p-8 md:p-12">
+      <div class="grid lg:grid-cols-[.9fr_1.1fr] gap-10 items-center">
+        <div>
+          <div class="text-blue-400 font-black text-sm mb-3">CUSTOM REQUEST</div>
+          <h2 class="text-3xl md:text-4xl font-black">送出客製化需求</h2>
+          <p class="mt-5 soft leading-8">表單會寫入後端資料庫，後台可以看到需求。</p>
+        </div>
+        <div class="space-y-4">
+          <input id="reqName" class="theme-input w-full px-5 py-4 rounded-2xl outline-none" placeholder="姓名 / 公司名稱">
+          <input id="reqEmail" class="theme-input w-full px-5 py-4 rounded-2xl outline-none" placeholder="Email / LINE ID">
+          <textarea id="reqMessage" class="theme-input w-full px-5 py-4 rounded-2xl outline-none h-28" placeholder="請描述想要的選股條件、圖表或報表功能"></textarea>
+          <button onclick="submitRequest()" class="w-full py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-black">送出客製化需求</button>
+          <p id="requestStatus" class="text-center soft text-sm"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="theme-section border-t py-8 text-center text-sm soft" style="border-color:var(--panel-border)">
+  © 2026 Stock Intelligence Platform｜即時台股爬蟲・策略訊號・數據視覺化
+</footer>
+
+<script>
+let charts = [];
+let autoTimer = null;
+
+function apiBase(){ return ''; }
+async function api(path, options={}){
+  const res = await fetch(apiBase() + path, options);
+  if(!res.ok) throw new Error('API Error: ' + path);
+  return await res.json();
+}
+
+function setApiStatus(ok){
+  const dot = document.getElementById('apiDot');
+  const status = document.getElementById('apiStatus');
+  if(ok){
+    dot.className = 'w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse';
+    status.textContent = 'API 已連線｜資料即時讀取中';
+  } else {
+    dot.className = 'w-2.5 h-2.5 bg-red-400 rounded-full animate-pulse';
+    status.textContent = 'API 未連線｜請先執行 python main.py';
+  }
+}
+
+function fmt(v){ return v === null || v === undefined ? '-' : v; }
+function pct(v){ return v === null || v === undefined ? '-' : Number(v).toFixed(2) + '%'; }
+
+async function loadSummary(){
+  const s = await api('/api/summary');
+  document.getElementById('stockCount').textContent = s.stock_count;
+  document.getElementById('signalCount').textContent = s.signal_count;
+  document.getElementById('twseCount').textContent = s.twse_count;
+  document.getElementById('otcCount').textContent = s.otc_count;
+  document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
+}
+
+async function loadOptions(){
+  const opt = await api('/api/options');
+  const dateSel = document.getElementById('filterDate');
+  const monthSel = document.getElementById('filterMonth');
+
+  dateSel.innerHTML = '<option value="">全部</option>' + opt.dates.map(d => `<option value="${d}">${d}</option>`).join('');
+  monthSel.innerHTML = '<option value="">全部</option>' + opt.months.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+function getFilters(){
+  const params = new URLSearchParams();
+  const fields = [
+    ['code','filterCode'], ['name','filterName'], ['date','filterDate'], ['month','filterMonth'],
+    ['market','filterMarket'], ['min_volume','filterVolume']
+  ];
+  fields.forEach(([key,id]) => {
+    const val = document.getElementById(id).value.trim();
+    if(val) params.append(key, val);
+  });
+  if(document.getElementById('filterSignalOnly').checked) params.append('signal_only','true');
+  params.append('limit','500');
+  return params.toString();
+}
+
+async function loadStocks(){
+  const qs = getFilters();
+  const data = await api('/api/stocks?' + qs);
+  document.getElementById('displayCount').textContent = data.length;
+  document.getElementById('stockTable').innerHTML = data.map(s => `
+    <tr class="table-row border-b" style="border-color:var(--panel-border)">
+      <td class="py-3 px-4 whitespace-nowrap">${fmt(s.date)}</td>
+      <td class="py-3 px-4">${fmt(s.market)}</td>
+      <td class="py-3 px-4 font-black text-blue-400">${fmt(s.code)}</td>
+      <td class="py-3 px-4 font-black whitespace-nowrap">${fmt(s.name)}</td>
+      <td class="py-3 px-4 text-right">${fmt(s.item12)}</td>
+      <td class="py-3 px-4 text-right">${fmt(s.open_price)}</td>
+      <td class="py-3 px-4 text-right">${fmt(s.high_price)}</td>
+      <td class="py-3 px-4 text-right font-black">${fmt(s.close_price)}</td>
+      <td class="py-3 px-4 text-right">${fmt(s.low_price)}</td>
+      <td class="py-3 px-4 text-right">${fmt(s.volume)}</td>
+      <td class="py-3 px-4 text-right">${pct(s.amplitude)}</td>
+      <td class="py-3 px-4 text-right ${Number(s.change_range || 0) >= 0 ? 'metric-up' : 'metric-down'}">${pct(s.change_range)}</td>
+      <td class="py-3 px-4">${s.signal ? `<span class="badge bg-blue-500/20 text-blue-400">${s.signal}</span>` : '<span class="soft">-</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+function chartColors(){
+  const theme = document.documentElement.dataset.theme;
+  return theme === 'light'
+    ? { text:'#334155', grid:'rgba(15,23,42,.10)', line:'#2563eb' }
+    : { text:'#cbd5e1', grid:'rgba(148,163,184,.16)', line:'#60a5fa' };
+}
+
+function destroyCharts(){ charts.forEach(c => c.destroy()); charts = []; }
+
+async function loadCharts(){
+  destroyCharts();
+  const c = chartColors();
+  const [signals, markets, topVolume] = await Promise.all([
+    api('/api/chart/signals'), api('/api/chart/market'), api('/api/chart/top-volume')
+  ]);
+
+  charts.push(new Chart(document.getElementById('signalChart'), {
+    type:'line',
+    data:{ labels: signals.map(x=>x.date), datasets:[{ data: signals.map(x=>x.count), borderColor:c.line, backgroundColor:'rgba(96,165,250,.16)', fill:true, tension:.42, pointRadius:3 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:c.text}, grid:{color:c.grid}}, y:{ticks:{color:c.text}, grid:{color:c.grid}} } }
+  }));
+
+  charts.push(new Chart(document.getElementById('marketChart'), {
+    type:'doughnut',
+    data:{ labels: markets.map(x=>x.market), datasets:[{ data: markets.map(x=>x.count), backgroundColor:['#3b82f6','#14b8a6'], borderWidth:0 }] },
+    options:{ plugins:{legend:{labels:{color:c.text}}}, cutout:'68%' }
+  }));
+
+  charts.push(new Chart(document.getElementById('volumeChart'), {
+    type:'bar',
+    data:{ labels: topVolume.map(x=>`${x.code} ${x.name}`), datasets:[{ label:'成交張數', data: topVolume.map(x=>x.volume), backgroundColor:'rgba(59,130,246,.72)' }] },
+    options:{ plugins:{legend:{labels:{color:c.text}}}, scales:{ x:{ticks:{color:c.text}, grid:{display:false}}, y:{ticks:{color:c.text}, grid:{color:c.grid}} } }
+  }));
+}
+
+async function loadHealth(){
+  const logs = await api('/api/logs');
+  document.getElementById('healthBox').innerHTML = logs.slice(0,4).map(l => `
+    <div class="glass rounded-2xl p-4">
+      <div class="flex justify-between gap-4"><span class="font-black">${l.source}</span><span class="${l.status==='成功'?'metric-up':'metric-down'} font-black">${l.status}</span></div>
+      <div class="soft text-sm mt-1">${l.message}</div>
+      <div class="soft text-xs mt-2">${l.run_time}｜${l.rows_count} 筆</div>
+    </div>
+  `).join('');
+}
+
+async function loadRealtimeData(){
+  try {
+    await api('/api/health');
+    setApiStatus(true);
+    await loadSummary();
+    await loadOptions();
+    await loadStocks();
+    await loadCharts();
+    await loadHealth();
+  } catch(e) {
+    console.error(e);
+    setApiStatus(false);
+  }
+}
+
+function resetFilters(){
+  ['filterCode','filterName','filterDate','filterMonth','filterMarket','filterVolume'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('filterSignalOnly').checked = false;
+  loadStocks();
+}
+
+async function submitRequest(){
+  const payload = {
+    name: document.getElementById('reqName').value,
+    email: document.getElementById('reqEmail').value,
+    message: document.getElementById('reqMessage').value
+  };
+  const status = document.getElementById('requestStatus');
+  try {
+    await api('/api/requests', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    status.textContent = '已送出，後台可以查看此需求。';
+    document.getElementById('reqName').value = '';
+    document.getElementById('reqEmail').value = '';
+    document.getElementById('reqMessage').value = '';
+  } catch(e) {
+    status.textContent = '送出失敗，請確認後端已啟動。';
+  }
+}
+
+function applyTheme(theme){
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('stock-theme', theme);
+  const icon = document.getElementById('themeIcon');
+  if(icon) icon.textContent = theme === 'light' ? '☀️' : '🌙';
+  if(document.getElementById('signalChart')) loadCharts().catch(()=>{});
+}
+function toggleTheme(){ applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); }
+
+(function init(){
+  const saved = localStorage.getItem('stock-theme');
+  const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  document.documentElement.dataset.theme = saved || (prefersLight ? 'light' : 'dark');
+  window.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('themeIcon').textContent = document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙';
+    await loadRealtimeData();
+    autoTimer = setInterval(loadRealtimeData, 30000);
+  });
+})();
+</script>
+</body>
+</html>

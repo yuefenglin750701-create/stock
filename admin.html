@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Intelligence｜後台管理系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family:'Noto Sans TC', sans-serif; }
+    .active { background:#2563eb; color:white; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div class="min-h-screen flex">
+    <aside class="w-72 bg-slate-950 text-white hidden lg:flex flex-col">
+      <div class="p-6 border-b border-white/10">
+        <div class="text-2xl font-black">後台管理</div>
+        <div class="text-sm text-slate-400 mt-1">Stock Intelligence</div>
+      </div>
+      <nav class="p-4 space-y-2 text-sm font-bold">
+        <a class="block px-5 py-3 rounded-2xl active" href="#dashboard">總覽儀表板</a>
+        <a class="block px-5 py-3 rounded-2xl hover:bg-white/10" href="#stocks">股票資料</a>
+        <a class="block px-5 py-3 rounded-2xl hover:bg-white/10" href="#strategy">選股策略</a>
+        <a class="block px-5 py-3 rounded-2xl hover:bg-white/10" href="#users">用戶管理</a>
+        <a class="block px-5 py-3 rounded-2xl hover:bg-white/10" href="#orders">客製化需求</a>
+        <a class="block px-5 py-3 rounded-2xl hover:bg-white/10" href="index.html">回前台</a>
+      </nav>
+      <div class="mt-auto p-5 text-xs text-slate-400">資料庫：SQLite<br>後端：FastAPI<br>更新：每 30 秒</div>
+    </aside>
+
+    <main class="flex-1">
+      <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+        <div>
+          <div class="text-xl font-black">智慧選股爬蟲後台</div>
+          <div class="text-sm text-slate-500">API / SQLite 即時資料管理</div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="seedData()" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-sm">匯入範例資料</button>
+          <button onclick="loadAll()" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-sm">重新整理</button>
+        </div>
+      </header>
+
+      <div class="p-6 space-y-8">
+        <section id="dashboard">
+          <h2 class="text-2xl font-black mb-5">總覽儀表板</h2>
+          <div class="grid md:grid-cols-2 xl:grid-cols-5 gap-5">
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200"><div class="text-slate-500 text-sm">資料庫狀態</div><div id="dbStatus" class="text-3xl font-black text-emerald-600 mt-2">讀取中</div><div class="text-xs text-slate-400 mt-2">API health</div></div>
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200"><div class="text-slate-500 text-sm">股票資料筆數</div><div id="stockCount" class="text-3xl font-black mt-2">-</div><div class="text-xs text-slate-400 mt-2">stocks table</div></div>
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200"><div class="text-slate-500 text-sm">策略命中</div><div id="signalCount" class="text-3xl font-black text-blue-600 mt-2">-</div><div class="text-xs text-slate-400 mt-2">signals</div></div>
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200"><div class="text-slate-500 text-sm">策略數量</div><div id="strategyCount" class="text-3xl font-black mt-2">-</div><div class="text-xs text-slate-400 mt-2">strategies</div></div>
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200"><div class="text-slate-500 text-sm">客製化需求</div><div id="requestCount" class="text-3xl font-black mt-2">-</div><div class="text-xs text-slate-400 mt-2">requests</div></div>
+          </div>
+        </section>
+
+        <section id="stocks" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+            <h2 class="text-2xl font-black">股票資料管理</h2>
+            <div class="grid md:grid-cols-5 gap-2">
+              <input id="adminCode" class="px-4 py-2 rounded-xl border border-slate-200" placeholder="代號">
+              <input id="adminName" class="px-4 py-2 rounded-xl border border-slate-200" placeholder="名稱">
+              <select id="adminMarket" class="px-4 py-2 rounded-xl border border-slate-200"><option value="">全部市場</option><option value="TWSE">TWSE</option><option value="OTC">OTC</option></select>
+              <input id="adminVolume" type="number" class="px-4 py-2 rounded-xl border border-slate-200" placeholder="成交張數≥">
+              <button onclick="loadStocks()" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold">篩選</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto max-h-[520px]">
+            <table class="w-full text-sm">
+              <thead class="text-slate-500 border-b sticky top-0 bg-white">
+                <tr>
+                  <th class="text-left py-3">日期</th><th class="text-left py-3">市場</th><th class="text-left py-3">代號</th><th class="text-left py-3">名稱</th><th class="text-right py-3">開盤</th><th class="text-right py-3">最高</th><th class="text-right py-3">收盤</th><th class="text-right py-3">最低</th><th class="text-right py-3">成交張數</th><th class="text-left py-3">訊號</th>
+                </tr>
+              </thead>
+              <tbody id="stocksBody" class="divide-y"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="strategy" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+          <h2 class="text-2xl font-black mb-5">選股策略管理</h2>
+          <div id="strategiesList" class="grid md:grid-cols-4 gap-4"></div>
+        </section>
+
+        <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+          <h2 class="text-2xl font-black mb-5">爬蟲執行紀錄</h2>
+          <div id="logsList" class="grid md:grid-cols-3 gap-4"></div>
+        </section>
+
+        <div class="grid xl:grid-cols-2 gap-6">
+          <section id="users" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+            <h2 class="text-2xl font-black mb-5">用戶管理</h2>
+            <div id="usersList" class="space-y-3"></div>
+          </section>
+          <section id="orders" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+            <h2 class="text-2xl font-black mb-5">客製化需求</h2>
+            <div id="requestsList" class="space-y-3"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script>
+async function api(path, options={}) {
+  const res = await fetch(path, options);
+  if (!res.ok) throw new Error('API error');
+  return await res.json();
+}
+
+async function loadSummary(){
+  const s = await api('/api/summary');
+  document.getElementById('dbStatus').textContent = '正常';
+  document.getElementById('stockCount').textContent = s.stock_count;
+  document.getElementById('signalCount').textContent = s.signal_count;
+  document.getElementById('strategyCount').textContent = s.strategy_count;
+  document.getElementById('requestCount').textContent = s.request_count;
+}
+
+async function loadStocks(){
+  const params = new URLSearchParams();
+  const code = document.getElementById('adminCode').value.trim();
+  const name = document.getElementById('adminName').value.trim();
+  const market = document.getElementById('adminMarket').value;
+  const vol = document.getElementById('adminVolume').value.trim();
+  if(code) params.append('code', code);
+  if(name) params.append('name', name);
+  if(market) params.append('market', market);
+  if(vol) params.append('min_volume', vol);
+  params.append('limit','500');
+
+  const stocks = await api('/api/stocks?' + params.toString());
+  document.getElementById('stocksBody').innerHTML = stocks.map(s => `
+    <tr>
+      <td class="py-3">${s.date}</td><td>${s.market}</td><td class="font-black text-blue-600">${s.code}</td><td class="font-black">${s.name}</td>
+      <td class="text-right">${s.open_price ?? '-'}</td><td class="text-right">${s.high_price ?? '-'}</td>
+      <td class="text-right font-black">${s.close_price ?? '-'}</td><td class="text-right">${s.low_price ?? '-'}</td>
+      <td class="text-right">${s.volume ?? '-'}</td><td>${s.signal ? `<span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-black text-xs">${s.signal}</span>` : '-'}</td>
+    </tr>`).join('');
+}
+
+async function loadOthers(){
+  const [strategies, users, requests, logs] = await Promise.all([
+    api('/api/strategies'), api('/api/users'), api('/api/requests'), api('/api/logs')
+  ]);
+
+  document.getElementById('strategiesList').innerHTML = strategies.map(s => `
+    <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200">
+      <div class="font-black">${s.name}</div>
+      <div class="text-sm text-slate-500 mt-2">${s.description}</div>
+      <div class="text-xs mt-3 font-bold ${s.active ? 'text-emerald-600' : 'text-slate-400'}">${s.active ? '啟用' : '停用'}</div>
+    </div>`).join('');
+
+  document.getElementById('usersList').innerHTML = users.map(u => `
+    <div class="p-4 rounded-2xl bg-slate-50 flex justify-between">
+      <span>${u.name}｜${u.plan}</span><span class="text-emerald-600 font-bold">${u.status}</span>
+    </div>`).join('');
+
+  document.getElementById('requestsList').innerHTML = requests.map(r => `
+    <div class="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+      <div class="font-black">${r.name}｜${r.email}</div>
+      <div class="text-sm text-slate-500 mt-1">${r.message}</div>
+    </div>`).join('');
+
+  document.getElementById('logsList').innerHTML = logs.map(l => `
+    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+      <div class="flex justify-between"><span class="font-black">${l.source}</span><span class="text-emerald-600 font-black">${l.status}</span></div>
+      <div class="text-sm text-slate-500 mt-1">${l.message}</div>
+      <div class="text-xs text-slate-400 mt-2">${l.run_time}｜${l.rows_count} 筆</div>
+    </div>`).join('');
+}
+
+async function loadAll(){
+  try {
+    await api('/api/health');
+    await loadSummary();
+    await loadStocks();
+    await loadOthers();
+  } catch(e) {
+    document.getElementById('dbStatus').textContent = '未連線';
+    document.getElementById('dbStatus').className = 'text-3xl font-black text-red-600 mt-2';
+    alert('請先啟動後端：python main.py，並用 http://127.0.0.1:8000/admin.html 開啟');
+  }
+}
+
+async function seedData(){
+  await api('/api/seed', {method:'POST'});
+  await loadAll();
+}
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
